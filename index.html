@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
 <title>Subdivision Tap Trainer</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#17181c">
@@ -1007,22 +1007,30 @@ canvas{ display:block; width:100%; height:170px; }
     }
     pick.addEventListener('change', ()=> applyValue(pick.value));
 
-    // double-tap / double-click clears the slot to empty
-    let lastTap = 0;
-    function handleQuickTap(e){
-      if(isRunning) return;
+    // double-tap (touch) / double-click (mouse) clears the slot to empty
+    let lastTapTime = 0;
+    function registerQuickTap(e){
+      if(isRunning) return false;
       const t = Date.now();
-      if(t - lastTap < 320){
-        // second tap within window → clear, and stop the native picker from opening
-        e.preventDefault();
-        lastTap = 0;
+      if(t - lastTapTime < 350){
+        lastTapTime = 0;
+        if(e && e.cancelable) e.preventDefault();
+        if(e) e.stopPropagation();
         if(pick.value !== NONE) applyValue(NONE);
-      } else {
-        lastTap = t;
+        try{ pick.blur(); }catch(_){}
+        return true;
       }
+      lastTapTime = t;
+      return false;
     }
-    pick.addEventListener('pointerdown', handleQuickTap);
-    pick.addEventListener('dblclick', (e)=>{ e.preventDefault(); if(!isRunning && pick.value !== NONE) applyValue(NONE); });
+    // touchend fires reliably in iOS WebKit; preventDefault here blocks the native picker
+    pick.addEventListener('touchend', (e)=>{ registerQuickTap(e); }, {passive:false});
+    // mouse / desktop
+    pick.addEventListener('dblclick', (e)=>{
+      if(isRunning) return;
+      e.preventDefault();
+      if(pick.value !== NONE) applyValue(NONE);
+    });
     return pick;
   }
 
