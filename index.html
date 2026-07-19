@@ -123,6 +123,61 @@ body{
   padding:4px 10px;
   cursor:pointer;
 }
+.voice-select{
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  background:var(--inset);
+  color:var(--text);
+  border:1px solid #000;
+  border-radius:6px;
+  padding:6px 8px;
+  cursor:pointer;
+}
+.test-feedback{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  min-height:150px;
+  background:var(--scope-bg);
+  border-radius:10px;
+  transition:background .08s ease;
+}
+.test-feedback.flash-good{ background:rgba(45,230,160,0.18); }
+.test-feedback.flash-rush{ background:rgba(255,178,56,0.18); }
+.test-feedback.flash-drag{ background:rgba(120,140,255,0.18); }
+.tf-word{
+  font-family:'JetBrains Mono',monospace;
+  font-size:38px;
+  font-weight:700;
+  letter-spacing:.02em;
+  color:var(--muted);
+  line-height:1.1;
+}
+.tf-word.good{ color:var(--green); }
+.tf-word.rush{ color:var(--amber); }
+.tf-word.drag{ color:#8fa0ff; }
+.tf-sub{
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  color:var(--muted);
+  margin-top:6px;
+}
+.test-hits{
+  display:flex;
+  gap:4px;
+  flex-wrap:wrap;
+  justify-content:center;
+  margin-top:10px;
+  min-height:18px;
+}
+.test-hits span{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  padding:2px 6px;
+  border-radius:4px;
+  background:var(--panel-raised);
+}
 :root[data-theme="neon"] .theme-toggle{
   border-color:var(--accent);
   box-shadow:0 0 6px var(--accent);
@@ -231,6 +286,30 @@ body{
 .beat-select:disabled{ opacity:.35; cursor:not-allowed; }
 
 .pattern-editor{ margin-top:12px; }
+.step-grid-wrap{ overflow-x:auto; padding:4px 0 8px; -webkit-overflow-scrolling:touch; }
+.step-grid{ display:flex; flex-direction:column; gap:4px; min-width:min-content; }
+.sg-beatnums{ display:grid; gap:3px; margin-bottom:2px; }
+.sg-beatnums span{
+  font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted);
+  text-align:center;
+}
+.sg-row{ display:grid; gap:3px; align-items:center; }
+.sg-name{
+  font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text);
+  background:var(--panel-raised); border:1px solid #000; border-radius:5px;
+  padding:6px 4px; text-align:center; cursor:pointer; user-select:none;
+  min-width:38px; white-space:nowrap;
+}
+.sg-cell{
+  aspect-ratio:1; min-width:20px; border-radius:4px;
+  background:var(--panel-raised); border:1px solid #000; cursor:pointer;
+  transition:background .05s ease;
+}
+.sg-cell.pulse{ background:#33353b; }
+.sg-cell.on{ background:var(--accent); }
+:root[data-theme="neon"] .sg-cell.on{ box-shadow:0 0 5px var(--accent); }
+.sg-cell.playing{ outline:2px solid var(--green); outline-offset:-1px; }
+
 .bar-tabs{ display:flex; gap:6px; flex-wrap:wrap; }
 .bar-tabs .pill-btn.add-bar{
   color:var(--green);
@@ -279,24 +358,6 @@ body{
   color:var(--muted);
   letter-spacing:.02em;
   line-height:1.5;
-}
-.mic-sensitivity{
-  flex:1;
-  accent-color:var(--amber);
-}
-.mic-meter{
-  flex:1;
-  height:10px;
-  background:var(--inset);
-  border-radius:5px;
-  border:1px solid #000;
-  overflow:hidden;
-}
-.mic-meter-fill{
-  height:100%;
-  width:0%;
-  background:linear-gradient(90deg,var(--green),var(--amber) 70%,var(--red));
-  transition:width .04s linear;
 }
 
 .reset-link{
@@ -616,6 +677,25 @@ canvas{ display:block; width:100%; height:170px; }
         <button class="pill-btn" data-sub="custom">Custom</button>
       </div>
     </div>
+    <div class="row">
+      <div class="label">Sound</div>
+      <select id="metroVoiceSelect" class="voice-select">
+        <option value="woodblock">Woodblock</option>
+        <option value="clave">Clave</option>
+        <option value="stick">Stick</option>
+        <option value="rim">Rimshot</option>
+        <option value="beep">Beep</option>
+        <option value="cowbell">Cowbell</option>
+      </select>
+      <button class="stepper-btn" id="voicePreview" type="button">▶ Test</button>
+    </div>
+    <div class="row">
+      <div class="label">Mode</div>
+      <div class="subdiv-group" id="modeGroup">
+        <button class="pill-btn selected" data-mode="practice">Practice</button>
+        <button class="pill-btn" data-mode="test">Test</button>
+      </div>
+    </div>
     <div id="patternEditor" class="pattern-editor" style="display:none;">
       <div class="row">
         <div class="label">Bars</div>
@@ -628,32 +708,23 @@ canvas{ display:block; width:100%; height:170px; }
         <button class="stepper-btn" id="repeatPlus">+</button>
         <button class="stepper-btn" id="removeBarBtn">Remove Bar</button>
       </div>
-      <div class="row">
-        <div class="label">Per Beat</div>
-        <div class="pattern-group">
-          <div class="beat-slot">
-            <span class="beat-slot-label">Beat 1</span>
-            <select class="beat-select" data-beat="0"></select>
-            <div class="mute-toggles" data-beat="0"></div>
-          </div>
-          <div class="beat-slot">
-            <span class="beat-slot-label">Beat 2</span>
-            <select class="beat-select" data-beat="1"></select>
-            <div class="mute-toggles" data-beat="1"></div>
-          </div>
-          <div class="beat-slot">
-            <span class="beat-slot-label">Beat 3</span>
-            <select class="beat-select" data-beat="2"></select>
-            <div class="mute-toggles" data-beat="2"></div>
-          </div>
-          <div class="beat-slot">
-            <span class="beat-slot-label">Beat 4</span>
-            <select class="beat-select" data-beat="3"></select>
-            <div class="mute-toggles" data-beat="3"></div>
-          </div>
+      <div class="row" style="flex-wrap:wrap; gap:8px;">
+        <div class="label">Grid</div>
+        <div class="subdiv-group" id="gridSubGroup">
+          <button class="pill-btn" data-gridsub="2">1/8</button>
+          <button class="pill-btn" data-gridsub="3">1/8T</button>
+          <button class="pill-btn selected" data-gridsub="4">1/16</button>
         </div>
+        <button class="stepper-btn" id="rockPresetBtn" type="button">Basic Rock</button>
+        <button class="stepper-btn" id="clearGridBtn" type="button">Clear</button>
       </div>
-      <div class="mute-hint">Tap number to mute (rest) · dropdown picks the drum · editing Bar <span id="editingBarLabel">1</span></div>
+      <div class="step-grid-wrap">
+        <div class="step-grid" id="stepGrid"></div>
+      </div>
+      <div class="row" style="justify-content:flex-start; gap:8px;">
+        <button class="stepper-btn" id="addInstrumentBtn" type="button">+ Add instrument</button>
+      </div>
+      <div class="mute-hint">Tap a cell to place a note · tap an instrument name to change or remove its row · editing Bar <span id="editingBarLabel">1</span></div>
     </div>
     <div class="row">
       <div class="count-syllables">Count out loud: <b id="syllables">1 & 2 & 3 & 4 &</b></div>
@@ -671,7 +742,6 @@ canvas{ display:block; width:100%; height:170px; }
       <div class="subdiv-group" id="inputModeGroup">
         <button class="pill-btn selected" data-input="buttons">Tap Buttons</button>
         <button class="pill-btn" data-input="midi">MIDI</button>
-        <button class="pill-btn" data-input="mic">Microphone</button>
       </div>
     </div>
     <div class="row" id="midiControls" style="display:none;">
@@ -680,16 +750,6 @@ canvas{ display:block; width:100%; height:170px; }
     </div>
     <div class="row" id="midiStatusRow" style="display:none;">
       <div class="io-status" id="midiStatus">Connect your Alesis Nitro Max via USB (or a MIDI interface), then pick it above.</div>
-    </div>
-    <div class="row" id="micControls" style="display:none;">
-      <div class="label">Sensitivity</div>
-      <input type="range" id="micSensitivity" class="mic-sensitivity" min="1" max="10" value="5">
-    </div>
-    <div class="row" id="micMeterRow" style="display:none;">
-      <div class="mic-meter"><div class="mic-meter-fill" id="micMeterFill"></div></div>
-    </div>
-    <div class="row" id="micStatusRow" style="display:none;">
-      <div class="io-status" id="micStatus">Requesting microphone…</div>
     </div>
   </div>
 
@@ -799,6 +859,13 @@ canvas{ display:block; width:100%; height:170px; }
       <canvas id="scope"></canvas>
       <div class="scope-caption">Notes scroll to the amber line · lanes = drums (custom mode)</div>
     </div>
+    <div id="testPanel" style="display:none;">
+      <div id="testFeedback" class="test-feedback">
+        <div class="tf-word" id="tfWord">Ready</div>
+        <div class="tf-sub" id="tfSub">Play with the click</div>
+      </div>
+      <div class="test-hits" id="testHits"></div>
+    </div>
   </div>
 
   <div class="pad-wrap">
@@ -850,6 +917,8 @@ canvas{ display:block; width:100%; height:170px; }
     PAL.red = cssVar('--red', '#ff5c5c');
   }
   let viewMode = 'both'; // 'both' | 'staff' | 'lanes'
+  let appMode = 'practice'; // 'practice' | 'test'
+  let testHitCount = 0;
   const syllablesEl = document.getElementById('syllables');
   const subButtons = document.querySelectorAll('.pill-btn[data-sub]');
 
@@ -901,10 +970,17 @@ canvas{ display:block; width:100%; height:170px; }
   let subdivision = 2;
   let useCustomPattern = false;
   // Each note (subdivision) holds a "stack": an array of instrument slots.
-  // A slot is an instrument id or NONE (empty). Default stack: closed HH + snare + empty.
-  function defaultStack(){ return ['hihat','snare','kick']; }
+  // A slot is an instrument id or NONE (empty).
+  function defaultStack(){ return ['hihat','snare','kick']; }        // full voicing (quarter-pulse)
+  function offbeatStack(){ return ['hihat', NONE, NONE]; }           // hi-hat only (e / & / a)
+  // Build the default stack for subdivision index `s` of a beat: index 0 is the
+  // quarter-note pulse (full stack); all other subdivisions get closed hi-hat only.
+  function defaultStackFor(s){ return s === 0 ? defaultStack() : offbeatStack(); }
+  function stacksForCount(n){
+    return new Array(n).fill(null).map((_,s)=> defaultStackFor(s));
+  }
   function defaultBeat(){
-    return { count:2, mute:[false,false], stacks:[defaultStack(), defaultStack()] };
+    return { count:2, mute:[false,false], stacks:stacksForCount(2) };
   }
   function defaultBar(){ return { pattern:[defaultBeat(),defaultBeat(),defaultBeat(),defaultBeat()], repeats:1 }; }
   let bars = [ defaultBar() ];
@@ -918,7 +994,7 @@ canvas{ display:block; width:100%; height:170px; }
 
   let isRunning = false;
   let audioCtx = null;
-  let inputMode = 'buttons'; // 'buttons' | 'midi' | 'mic'
+  let inputMode = 'buttons'; // 'buttons' | 'midi'
   let syncPerfNow = 0;
   let syncCtxTime = 0;
 
@@ -955,9 +1031,6 @@ canvas{ display:block; width:100%; height:170px; }
   const barTabs = document.getElementById('barTabs');
   const repeatDisplay = document.getElementById('repeatDisplay');
   const editingBarLabel = document.getElementById('editingBarLabel');
-  const beatSelects = document.querySelectorAll('.beat-select[data-beat]');
-  const BEAT_OPTION_LABELS = { 1:'1/4', 2:'1/8', 3:'1/8T', 4:'1/16' };
-
   function normStack(st){
     if(!Array.isArray(st) || st.length === 0) return defaultStack();
     return st.map(x => x == null ? NONE : x);
@@ -971,7 +1044,7 @@ canvas{ display:block; width:100%; height:170px; }
         beat.stacks = [];
       }
     }
-    while(beat.stacks.length < beat.count) beat.stacks.push(defaultStack());
+    while(beat.stacks.length < beat.count) beat.stacks.push(defaultStackFor(beat.stacks.length));
     beat.stacks.length = beat.count;
     beat.stacks = beat.stacks.map(normStack);
     delete beat.drums;
@@ -985,125 +1058,201 @@ canvas{ display:block; width:100%; height:170px; }
     return (st || []).filter(x => x && x !== NONE);
   }
 
-  function makeInstrumentSelect(currentVal, onChange){
-    const pick = document.createElement('select');
-    pick.className = 'drum-pick';
-    const noneOpt = document.createElement('option');
-    noneOpt.value = NONE; noneOpt.textContent = '—';
-    pick.appendChild(noneOpt);
-    DRUM_ORDER.forEach(d=>{
-      const o = document.createElement('option');
-      o.value = d;
-      o.textContent = DRUM_SHORT[d];
-      pick.appendChild(o);
-    });
-    pick.value = currentVal || NONE;
-    pick.style.color = pick.value === NONE ? '#6b6f78' : (DRUM_LANE_COLOR[pick.value] || '#eceae4');
-    pick.disabled = isRunning;
-    function applyValue(v){
-      pick.value = v;
-      pick.style.color = v === NONE ? '#6b6f78' : (DRUM_LANE_COLOR[v] || '#eceae4');
-      onChange(v);
-    }
-    pick.addEventListener('change', ()=> applyValue(pick.value));
+  // ===== Step-grid editor =====
+  // Grid rows are a session-level list of instruments; columns = 4 beats * gridSub.
+  let gridInstruments = ['hihat','snare','kick'];
+  let gridSub = 4; // subdivisions per beat (2=1/8, 3=1/8T, 4=1/16)
+  const stepGridEl = document.getElementById('stepGrid');
 
-    // double-tap (touch) / double-click (mouse) clears the slot to empty
-    let lastTapTime = 0;
-    function registerQuickTap(e){
-      if(isRunning) return false;
-      const t = Date.now();
-      if(t - lastTapTime < 350){
-        lastTapTime = 0;
-        if(e && e.cancelable) e.preventDefault();
-        if(e) e.stopPropagation();
-        if(pick.value !== NONE) applyValue(NONE);
-        try{ pick.blur(); }catch(_){}
-        return true;
+  function beatSubCount(){ return gridSub; }
+
+  // ensure every beat in the editing bar has `gridSub` subdivisions
+  function normalizeBarToGrid(bar){
+    bar.pattern.forEach((beat, bi)=>{
+      const prev = Array.isArray(beat.stacks) ? beat.stacks.slice() : [];
+      const prevCount = beat.count || prev.length || 0;
+      beat.count = gridSub;
+      beat.mute = new Array(gridSub).fill(false);
+      // remap old subdivisions onto the new grid by fractional position
+      const newStacks = new Array(gridSub).fill(null).map(()=> []);
+      if(prevCount > 0){
+        for(let s=0; s<prevCount; s++){
+          const frac = s/prevCount;
+          const nk = Math.round(frac*gridSub);
+          if(nk>=0 && nk<gridSub && Array.isArray(prev[s])){
+            stackInstruments(prev[s]).forEach(inst=>{
+              if(!newStacks[nk].includes(inst)) newStacks[nk].push(inst);
+            });
+          }
+        }
       }
-      lastTapTime = t;
-      return false;
-    }
-    // touchend fires reliably in iOS WebKit; preventDefault here blocks the native picker
-    pick.addEventListener('touchend', (e)=>{ registerQuickTap(e); }, {passive:false});
-    // mouse / desktop
-    pick.addEventListener('dblclick', (e)=>{
-      if(isRunning) return;
-      e.preventDefault();
-      if(pick.value !== NONE) applyValue(NONE);
+      beat.stacks = newStacks.map(arr => arr.length ? arr.slice() : [NONE]);
     });
-    return pick;
   }
 
-  function renderMuteToggles(beatIndex){
-    const beat = bars[editingBarIndex].pattern[beatIndex];
-    ensureBeatArrays(beat);
-    const container = document.querySelector(`.mute-toggles[data-beat="${beatIndex}"]`);
-    container.innerHTML = '';
-    const tmpl = BEAT_TEMPLATES[beat.count] || BEAT_TEMPLATES[1];
-    tmpl.forEach((s, idx)=>{
-      const label = s==='{n}' ? String(beatIndex+1) : s;
-      const cell = document.createElement('div');
-      cell.className = 'note-cell';
+  // is instrument present at (beatIndex, subIndex)?
+  function cellOn(bar, inst, beatIndex, subIndex){
+    const beat = bar.pattern[beatIndex];
+    if(!beat || !beat.stacks[subIndex]) return false;
+    return beat.stacks[subIndex].includes(inst);
+  }
+  function toggleCell(bar, inst, beatIndex, subIndex){
+    const beat = bar.pattern[beatIndex];
+    let stack = beat.stacks[subIndex];
+    if(!Array.isArray(stack)){ stack = [NONE]; beat.stacks[subIndex] = stack; }
+    const active = stackInstruments(stack);
+    const has = active.includes(inst);
+    if(has){
+      const remaining = active.filter(x=>x!==inst);
+      beat.stacks[subIndex] = remaining.length ? remaining : [NONE];
+    } else {
+      const cleaned = active.slice();
+      cleaned.push(inst);
+      beat.stacks[subIndex] = cleaned;
+    }
+  }
 
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'mute-btn' + (beat.mute[idx] ? ' muted' : '');
-      btn.textContent = label;
-      btn.disabled = isRunning;
-      btn.addEventListener('click', ()=>{
-        if(isRunning) return;
-        beat.mute[idx] = !beat.mute[idx];
-        renderMuteToggles(beatIndex);
-        updateSyllables();
-      });
-      cell.appendChild(btn);
-
-      const stackWrap = document.createElement('div');
-      stackWrap.className = 'stack-wrap' + (beat.mute[idx] ? ' muted-stack' : '');
-      const stack = beat.stacks[idx];
-
-      stack.forEach((inst, slotIdx)=>{
-        const pick = makeInstrumentSelect(inst, (val)=>{ stack[slotIdx] = val; });
-        pick.disabled = isRunning || beat.mute[idx];
-        stackWrap.appendChild(pick);
-      });
-
-      // add / remove slot buttons
-      const slotBtns = document.createElement('div');
-      slotBtns.className = 'slot-btns';
-      const addBtn = document.createElement('button');
-      addBtn.type = 'button'; addBtn.className = 'slot-btn'; addBtn.textContent = '+';
-      addBtn.disabled = isRunning || beat.mute[idx] || stack.length >= 6;
-      addBtn.addEventListener('click', ()=>{
-        if(isRunning) return;
-        stack.push(NONE);
-        renderMuteToggles(beatIndex);
-      });
-      const remBtn = document.createElement('button');
-      remBtn.type = 'button'; remBtn.className = 'slot-btn'; remBtn.textContent = '−';
-      remBtn.disabled = isRunning || beat.mute[idx] || stack.length <= 1;
-      remBtn.addEventListener('click', ()=>{
-        if(isRunning) return;
-        stack.pop();
-        renderMuteToggles(beatIndex);
-      });
-      slotBtns.appendChild(addBtn);
-      slotBtns.appendChild(remBtn);
-      stackWrap.appendChild(slotBtns);
-
-      cell.appendChild(stackWrap);
-      container.appendChild(cell);
+  function instrumentPickerFor(rowIndex){
+    // simple prompt via a temporary select overlaying the name — use a select element
+    const inst = gridInstruments[rowIndex];
+    const sel = document.createElement('select');
+    sel.className = 'drum-pick';
+    const remove = document.createElement('option');
+    remove.value='__remove__'; remove.textContent='✕ remove row';
+    sel.appendChild(remove);
+    DRUM_ORDER.forEach(d=>{
+      const o=document.createElement('option'); o.value=d; o.textContent=DRUM_FULL[d];
+      if(d===inst) o.selected=true;
+      sel.appendChild(o);
     });
+    return sel;
+  }
+
+  function renderStepGrid(){
+    if(!stepGridEl) return;
+    const bar = bars[editingBarIndex];
+    normalizeBarToGrid(bar);
+    stepGridEl.innerHTML = '';
+    const cols = 4 * gridSub;
+    const colTemplate = `38px repeat(${cols}, minmax(20px, 1fr))`;
+
+    // beat-number header row
+    const head = document.createElement('div');
+    head.className = 'sg-beatnums';
+    head.style.gridTemplateColumns = colTemplate;
+    const spacer = document.createElement('span'); spacer.textContent=''; head.appendChild(spacer);
+    const tmpl = BEAT_TEMPLATES[gridSub] || BEAT_TEMPLATES[1];
+    for(let b=0;b<4;b++){
+      for(let s=0;s<gridSub;s++){
+        const sp=document.createElement('span');
+        const sy = tmpl[s]==='{n}' ? String(b+1) : tmpl[s];
+        sp.textContent = sy;
+        head.appendChild(sp);
+      }
+    }
+    stepGridEl.appendChild(head);
+
+    gridInstruments.forEach((inst, r)=>{
+      const row = document.createElement('div');
+      row.className = 'sg-row';
+      row.style.gridTemplateColumns = colTemplate;
+
+      const name = document.createElement('div');
+      name.className = 'sg-name';
+      name.textContent = DRUM_SHORT[inst] || inst;
+      name.style.color = DRUM_LANE_COLOR[inst] || 'var(--text)';
+      name.title = DRUM_FULL[inst] || inst;
+      name.addEventListener('click', ()=>{
+        if(isRunning) return;
+        openRowMenu(r, name);
+      });
+      row.appendChild(name);
+
+      for(let b=0;b<4;b++){
+        for(let s=0;s<gridSub;s++){
+          const c=document.createElement('div');
+          c.className='sg-cell' + (s===0?' pulse':'') + (cellOn(bar,inst,b,s)?' on':'');
+          c.dataset.b=b; c.dataset.s=s; c.dataset.r=r;
+          c.addEventListener('click', ()=>{
+            if(isRunning) return;
+            toggleCell(bar, inst, b, s);
+            c.classList.toggle('on');
+            updateSyllables();
+          });
+          row.appendChild(c);
+        }
+      }
+      stepGridEl.appendChild(row);
+    });
+  }
+
+  // small inline menu to change/remove an instrument row
+  function openRowMenu(rowIndex, anchorEl){
+    const sel = instrumentPickerFor(rowIndex);
+    sel.style.position='absolute';
+    sel.style.zIndex='50';
+    const rect = anchorEl.getBoundingClientRect();
+    sel.style.left = (rect.left+window.scrollX)+'px';
+    sel.style.top = (rect.top+window.scrollY)+'px';
+    document.body.appendChild(sel);
+    sel.focus();
+    const cleanup = ()=>{ if(sel.parentNode) sel.parentNode.removeChild(sel); };
+    sel.addEventListener('change', ()=>{
+      const v = sel.value;
+      if(v==='__remove__'){
+        if(gridInstruments.length>1){
+          const removed = gridInstruments[rowIndex];
+          gridInstruments.splice(rowIndex,1);
+          // strip that instrument from the bar
+          bars.forEach(bar=>bar.pattern.forEach(beat=>{
+            if(Array.isArray(beat.stacks)) beat.stacks = beat.stacks.map(st=>{
+              const keep = stackInstruments(st).filter(x=>x!==removed);
+              return keep.length?keep:[NONE];
+            });
+          }));
+        }
+      } else {
+        gridInstruments[rowIndex] = v;
+      }
+      cleanup();
+      renderStepGrid();
+      updateSyllables();
+    });
+    sel.addEventListener('blur', cleanup);
+  }
+
+  function applyRockPreset(){
+    // hi-hat every subdivision, kick on beats 1 & 3, snare on 2 & 4
+    if(!gridInstruments.includes('hihat')) gridInstruments.unshift('hihat');
+    ['hihat','snare','kick'].forEach(x=>{ if(!gridInstruments.includes(x)) gridInstruments.push(x); });
+    const bar = bars[editingBarIndex];
+    normalizeBarToGrid(bar);
+    for(let b=0;b<4;b++){
+      for(let s=0;s<gridSub;s++){
+        const set = [];
+        set.push('hihat');                       // hi-hat on every subdivision
+        if(s===0 && (b===0 || b===2)) set.push('kick');   // kick on 1 & 3
+        if(s===0 && (b===1 || b===3)) set.push('snare');  // snare on 2 & 4
+        bar.pattern[b].stacks[s] = set.length ? set : [NONE];
+      }
+    }
+    renderStepGrid();
+    updateSyllables();
+  }
+
+  function clearGrid(){
+    const bar = bars[editingBarIndex];
+    normalizeBarToGrid(bar);
+    bar.pattern.forEach(beat=>{ beat.stacks = beat.stacks.map(()=>[NONE]); });
+    renderStepGrid();
+    updateSyllables();
   }
 
   function renderBarEditor(){
     const bar = bars[editingBarIndex];
     editingBarLabel.textContent = editingBarIndex+1;
-    repeatDisplay.textContent = bar.repeats;
-    beatSelects.forEach((sel, i)=>{
-      sel.value = bar.pattern[i].count;
-      renderMuteToggles(i);
-    });
+    if(repeatDisplay) repeatDisplay.textContent = bar.repeats;
+    renderStepGrid();
     updateSyllables();
   }
 
@@ -1138,24 +1287,25 @@ canvas{ display:block; width:100%; height:170px; }
     barTabs.appendChild(addBtn);
   }
 
-  beatSelects.forEach((sel, i)=>{
-    [1,2,3,4].forEach(n=>{
-      const opt = document.createElement('option');
-      opt.value = n;
-      opt.textContent = BEAT_OPTION_LABELS[n];
-      sel.appendChild(opt);
-    });
-    sel.addEventListener('change', ()=>{
-      const n = parseInt(sel.value,10);
-      const beat = bars[editingBarIndex].pattern[i];
-      ensureBeatArrays(beat);
-      const prevStacks = beat.stacks.slice();
-      beat.count = n;
-      beat.mute = new Array(n).fill(false);
-      beat.stacks = new Array(n).fill(null).map((_,k)=> prevStacks[k] ? prevStacks[k].slice() : defaultStack());
-      renderMuteToggles(i);
+  // grid subdivision selector
+  document.querySelectorAll('#gridSubGroup .pill-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(isRunning) return;
+      document.querySelectorAll('#gridSubGroup .pill-btn').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      gridSub = parseInt(btn.dataset.gridsub,10);
+      renderStepGrid();
       updateSyllables();
     });
+  });
+  document.getElementById('rockPresetBtn').addEventListener('click', ()=>{ if(!isRunning) applyRockPreset(); });
+  document.getElementById('clearGridBtn').addEventListener('click', ()=>{ if(!isRunning) clearGrid(); });
+  document.getElementById('addInstrumentBtn').addEventListener('click', ()=>{
+    if(isRunning) return;
+    // add a sensible new instrument not already present
+    const candidate = DRUM_ORDER.find(d=> !gridInstruments.includes(d)) || 'tom1';
+    gridInstruments.push(candidate);
+    renderStepGrid();
   });
 
   document.getElementById('repeatMinus').onclick = ()=>{
@@ -1199,6 +1349,8 @@ canvas{ display:block; width:100%; height:170px; }
       if(btn.dataset.sub === 'custom'){
         useCustomPattern = true;
         patternEditor.style.display = '';
+        renderBarTabs();
+        renderBarEditor();
       } else {
         useCustomPattern = false;
         patternEditor.style.display = 'none';
@@ -1215,6 +1367,13 @@ canvas{ display:block; width:100%; height:170px; }
   const laneWrap = document.getElementById('laneWrap');
 
   function applyViewMode(){
+    if(appMode === 'test'){
+      // test mode owns visibility; hide scrolling visuals
+      viewModeRow.style.display = 'none';
+      staffWrap.style.display = 'none';
+      laneWrap.style.display = 'none';
+      return;
+    }
     // view-mode toggle only relevant in custom mode
     viewModeRow.style.display = useCustomPattern ? '' : 'none';
     const showStaff = useCustomPattern && (viewMode === 'both' || viewMode === 'staff');
@@ -1234,7 +1393,7 @@ canvas{ display:block; width:100%; height:170px; }
   });
 
   function setControlsEnabled(enabled){
-    document.querySelectorAll('.stepper-btn, .pill-btn, .beat-select, .mute-btn, .preset-input, .mic-sensitivity').forEach(b=> b.disabled = !enabled);
+    document.querySelectorAll('.stepper-btn, .pill-btn, .beat-select, .mute-btn, .preset-input').forEach(b=> b.disabled = !enabled);
     if(typeof renderDrumKit === 'function') renderDrumKit();
   }
 
@@ -1273,17 +1432,109 @@ canvas{ display:block; width:100%; height:170px; }
     });
   }
 
+  let metroVoice = 'woodblock';
+  let clickGainLevel = 0.9;
+
+  // shared short noise buffer for stick/rim voices (built once — light)
+  let _noiseBuf = null;
+  function noiseBuffer(){
+    if(_noiseBuf) return _noiseBuf;
+    const n = Math.floor(audioCtx.sampleRate * 0.05);
+    _noiseBuf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+    const d = _noiseBuf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = Math.random()*2-1;
+    return _noiseBuf;
+  }
+
   function playClick(time, accent){
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = accent ? 1500 : 1000;
-    gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.exponentialRampToValueAtTime(accent ? 0.9 : 0.55, time+0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time+0.06);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start(time);
-    osc.stop(time+0.08);
+    const out = audioCtx.destination;
+    const lvl = clickGainLevel * (accent ? 1.0 : 0.62);
+    switch(metroVoice){
+      case 'clave': {
+        // bright resonant clave: high sine with fast decay
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type='sine'; o.frequency.value = accent?2500:2000;
+        g.gain.setValueAtTime(0.0001,time);
+        g.gain.exponentialRampToValueAtTime(lvl,time+0.001);
+        g.gain.exponentialRampToValueAtTime(0.0001,time+0.05);
+        o.connect(g).connect(out); o.start(time); o.stop(time+0.06);
+        break;
+      }
+      case 'stick': {
+        // drumstick click: filtered noise burst
+        const src = audioCtx.createBufferSource(); src.buffer = noiseBuffer();
+        const bp = audioCtx.createBiquadFilter(); bp.type='bandpass';
+        bp.frequency.value = accent?2600:2000; bp.Q.value=1.2;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(lvl,time);
+        g.gain.exponentialRampToValueAtTime(0.0001,time+0.03);
+        src.connect(bp).connect(g).connect(out); src.start(time); src.stop(time+0.05);
+        break;
+      }
+      case 'rim': {
+        // rimshot-ish: noise + short tonal ping
+        const src = audioCtx.createBufferSource(); src.buffer = noiseBuffer();
+        const hp = audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1200;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(lvl,time);
+        g.gain.exponentialRampToValueAtTime(0.0001,time+0.025);
+        src.connect(hp).connect(g).connect(out); src.start(time); src.stop(time+0.04);
+        const o = audioCtx.createOscillator(), og = audioCtx.createGain();
+        o.type='triangle'; o.frequency.value = accent?440:330;
+        og.gain.setValueAtTime(lvl*0.6,time);
+        og.gain.exponentialRampToValueAtTime(0.0001,time+0.04);
+        o.connect(og).connect(out); o.start(time); o.stop(time+0.05);
+        break;
+      }
+      case 'beep': {
+        // electronic beep (square)
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type='square'; o.frequency.value = accent?1760:1320;
+        g.gain.setValueAtTime(0.0001,time);
+        g.gain.exponentialRampToValueAtTime(lvl*0.7,time+0.001);
+        g.gain.exponentialRampToValueAtTime(0.0001,time+0.045);
+        o.connect(g).connect(out); o.start(time); o.stop(time+0.06);
+        break;
+      }
+      case 'cowbell': {
+        // cowbell: two detuned squares through bandpass
+        const o1=audioCtx.createOscillator(), o2=audioCtx.createOscillator(), g=audioCtx.createGain();
+        const bp=audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=accent?900:800; bp.Q.value=2;
+        o1.type='square'; o2.type='square';
+        o1.frequency.value=accent?620:540; o2.frequency.value=accent?920:800;
+        g.gain.setValueAtTime(0.0001,time);
+        g.gain.exponentialRampToValueAtTime(lvl*0.7,time+0.002);
+        g.gain.exponentialRampToValueAtTime(0.0001,time+0.09);
+        o1.connect(bp); o2.connect(bp); bp.connect(g).connect(out);
+        o1.start(time); o2.start(time); o1.stop(time+0.1); o2.stop(time+0.1);
+        break;
+      }
+      case 'woodblock':
+      default: {
+        // classic woodblock: pitched sine with quick pitch drop + tiny click transient
+        const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+        o.type='sine';
+        o.frequency.setValueAtTime(accent?1200:900, time);
+        o.frequency.exponentialRampToValueAtTime(accent?820:640, time+0.02);
+        g.gain.setValueAtTime(0.0001,time);
+        g.gain.exponentialRampToValueAtTime(lvl,time+0.001);
+        g.gain.exponentialRampToValueAtTime(0.0001,time+0.05);
+        o.connect(g).connect(out); o.start(time); o.stop(time+0.06);
+        // transient click for attack definition
+        const src=audioCtx.createBufferSource(); src.buffer=noiseBuffer();
+        const hp=audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=3000;
+        const ng=audioCtx.createGain();
+        ng.gain.setValueAtTime(lvl*0.35,time);
+        ng.gain.exponentialRampToValueAtTime(0.0001,time+0.012);
+        src.connect(hp).connect(ng).connect(out); src.start(time); src.stop(time+0.02);
+        break;
+      }
+    }
+  }
+
+  function previewMetroVoice(){
+    if(!audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+    playClick(audioCtx.currentTime+0.02, true);
   }
 
   function playTapSound(time){
@@ -1464,6 +1715,7 @@ canvas{ display:block; width:100%; height:170px; }
         stats.streak++;
         if(stats.streak > stats.best) stats.best = stats.streak;
       }
+      if(appMode === 'test') showTestFeedback(deltaMs, tier);
       refreshStatsUI();
     } else {
       lastExtraFlashAt = now;
@@ -1475,6 +1727,41 @@ canvas{ display:block; width:100%; height:170px; }
   function pulsePad(padEl){
     padEl.classList.add('active');
     setTimeout(()=> padEl.classList.remove('active'), 90);
+  }
+
+  const GOOD_MS = 28; // within +/- this = "Good"
+  let _tfClearTimer = null;
+  function showTestFeedback(deltaMs, tier){
+    const w = document.getElementById('tfWord');
+    const s = document.getElementById('tfSub');
+    const panel = document.getElementById('testFeedback');
+    const hits = document.getElementById('testHits');
+    if(!w||!panel) return;
+    let word, cls, flash;
+    if(Math.abs(deltaMs) <= GOOD_MS){ word='Good'; cls='good'; flash='flash-good'; }
+    else if(deltaMs < 0){ word='Rushing'; cls='rush'; flash='flash-rush'; }   // early = ahead of click
+    else { word='Dragging'; cls='drag'; flash='flash-drag'; }
+
+    w.textContent = word;
+    w.className = 'tf-word ' + cls;
+    if(s) s.textContent = (deltaMs>=0?'+':'') + Math.round(deltaMs) + ' ms';
+    panel.classList.remove('flash-good','flash-rush','flash-drag');
+    // force reflow so the flash re-triggers on rapid hits
+    void panel.offsetWidth;
+    panel.classList.add(flash);
+
+    if(hits){
+      const chip = document.createElement('span');
+      chip.textContent = word[0]; // R / G / D
+      chip.style.color = cls==='good' ? 'var(--green)' : (cls==='rush' ? 'var(--amber)' : '#8fa0ff');
+      hits.appendChild(chip);
+      while(hits.children.length > 16) hits.removeChild(hits.firstChild);
+    }
+
+    clearTimeout(_tfClearTimer);
+    _tfClearTimer = setTimeout(()=>{
+      panel.classList.remove('flash-good','flash-rush','flash-drag');
+    }, 220);
   }
 
   tapPadLeft.addEventListener('pointerdown', (e)=>{ e.preventDefault(); registerTap({padEl:tapPadLeft}); });
@@ -1575,6 +1862,9 @@ canvas{ display:block; width:100%; height:170px; }
 
   function draw(){
     requestAnimationFrame(draw);
+
+    // Test mode: no scrolling visuals at all — keeps the main thread free for tight input timing
+    if(appMode === 'test') return;
 
     const staffVisible = useCustomPattern && (viewMode === 'both' || viewMode === 'staff');
     const lanesVisible = !useCustomPattern || viewMode === 'both' || viewMode === 'lanes';
@@ -1904,39 +2194,15 @@ canvas{ display:block; width:100%; height:170px; }
   updateSyllables();
   refreshStatsUI();
 
-  // ---- Input source: Tap Buttons / MIDI / Microphone ----
+  // ---- Input source: Tap Buttons / MIDI ----
   const inputModeButtons = document.querySelectorAll('#inputModeGroup .pill-btn');
   const midiControls = document.getElementById('midiControls');
   const midiStatusRow = document.getElementById('midiStatusRow');
   const midiStatusEl = document.getElementById('midiStatus');
   const midiDeviceSelect = document.getElementById('midiDeviceSelect');
-  const micControls = document.getElementById('micControls');
-  const micMeterRow = document.getElementById('micMeterRow');
-  const micStatusRow = document.getElementById('micStatusRow');
-  const micStatusEl = document.getElementById('micStatus');
-  const micSensitivity = document.getElementById('micSensitivity');
-  const micMeterFill = document.getElementById('micMeterFill');
 
   let midiAccess = null;
   let midiInput = null;
-
-  let micStream = null;
-  let micSourceNode = null;
-  let micAnalyser = null;
-  let micDataArray = null;
-  let micRafId = null;
-  let micThreshold = 0.35;
-  let lastMicTriggerTime = -10;
-  const MIC_REFRACTORY = 0.09; // seconds, min gap between mic-detected hits
-
-  function sensitivityToThreshold(v){
-    // slider 1 (least sensitive) .. 10 (most sensitive)
-    return 0.62 - (v * 0.055);
-  }
-  micSensitivity.addEventListener('input', ()=>{
-    micThreshold = sensitivityToThreshold(parseFloat(micSensitivity.value));
-  });
-  micThreshold = sensitivityToThreshold(parseFloat(micSensitivity.value));
 
   // ---- 8-piece drum kit diagram + MIDI note mapping ----
   const DEFAULT_DRUM_NOTES = {
@@ -2066,7 +2332,7 @@ canvas{ display:block; width:100%; height:170px; }
 
   function initMidi(){
     if(!navigator.requestMIDIAccess){
-      midiStatusEl.textContent = 'Web MIDI isn\'t supported in this browser. Safari on iPhone/iPad never added it (Apple restriction) — try Chrome, Edge, or Firefox on a desktop instead, or use Microphone input here.';
+      midiStatusEl.textContent = 'Web MIDI isn\'t supported in this browser. Safari on iPhone/iPad never added it (Apple restriction) — use Chrome/Edge/Firefox on a desktop or Android, or a dedicated Web-MIDI browser app on iPad.';
       midiDeviceSelect.innerHTML = '<option value="">Not supported here</option>';
       return;
     }
@@ -2079,74 +2345,16 @@ canvas{ display:block; width:100%; height:170px; }
     });
   }
 
-  function updateMicMeter(level){
-    micMeterFill.style.width = Math.min(100, level*140) + '%';
-  }
-
-  async function enableMic(){
-    micStatusEl.textContent = 'Requesting microphone…';
-    try{
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
-      });
-    } catch(e){
-      micStatusEl.textContent = 'Microphone permission denied or unavailable.';
-      return;
-    }
-    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-    micSourceNode = audioCtx.createMediaStreamSource(micStream);
-    micAnalyser = audioCtx.createAnalyser();
-    micAnalyser.fftSize = 512;
-    micDataArray = new Uint8Array(micAnalyser.fftSize);
-    micSourceNode.connect(micAnalyser);
-    micStatusEl.textContent = 'Listening — hit your kit near the phone (adjust sensitivity if it misses hits or triggers on its own).';
-    micLoop();
-  }
-
-  function disableMic(){
-    if(micRafId){ cancelAnimationFrame(micRafId); micRafId = null; }
-    if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream = null; }
-    micAnalyser = null;
-    micSourceNode = null;
-    updateMicMeter(0);
-  }
-
-  function micLoop(){
-    micRafId = requestAnimationFrame(micLoop);
-    if(!micAnalyser || !audioCtx) return;
-    micAnalyser.getByteTimeDomainData(micDataArray);
-    let peak = 0;
-    for(let i=0;i<micDataArray.length;i++){
-      const v = Math.abs(micDataArray[i]-128);
-      if(v > peak) peak = v;
-    }
-    const level = peak/128;
-    updateMicMeter(level);
-    const now = audioCtx.currentTime;
-    if(level > micThreshold && (now - lastMicTriggerTime) > MIC_REFRACTORY){
-      lastMicTriggerTime = now;
-      registerTap({ time:now, silent:true, pulseBoth:true });
-    }
-  }
-
   function setInputMode(mode){
     inputMode = mode;
     inputModeButtons.forEach(b=> b.classList.toggle('selected', b.dataset.input === mode));
     midiControls.style.display = mode === 'midi' ? '' : 'none';
     midiStatusRow.style.display = mode === 'midi' ? '' : 'none';
     drumKitPanel.style.display = mode === 'midi' ? '' : 'none';
-    micControls.style.display = mode === 'mic' ? '' : 'none';
-    micMeterRow.style.display = mode === 'mic' ? '' : 'none';
-    micStatusRow.style.display = mode === 'mic' ? '' : 'none';
 
     if(mode === 'midi'){
-      disableMic();
       initMidi();
-    } else if(mode === 'mic'){
-      if(midiInput){ midiInput.onmidimessage = null; midiInput = null; }
-      enableMic();
     } else {
-      disableMic();
       if(midiInput){ midiInput.onmidimessage = null; midiInput = null; }
     }
   }
@@ -2212,6 +2420,21 @@ canvas{ display:block; width:100%; height:170px; }
     bars = (p.bars && p.bars.length) ? JSON.parse(JSON.stringify(p.bars)) : [defaultBar()];
     bars.forEach(bar => bar.pattern.forEach(beat => ensureBeatArrays(beat)));
     editingBarIndex = 0;
+    // rebuild grid rows from the instruments actually used, in kit order
+    const used = new Set();
+    bars.forEach(bar=>bar.pattern.forEach(beat=>{
+      (beat.stacks||[]).forEach(st=> stackInstruments(st).forEach(i=>used.add(i)));
+    }));
+    const rows = DRUM_ORDER.filter(d=>used.has(d));
+    gridInstruments = rows.length ? rows : ['hihat','snare','kick'];
+    // adopt the loaded bar's subdivision as grid subdivision
+    if(p.bars && p.bars[0] && p.bars[0].pattern && p.bars[0].pattern[0]){
+      const c = p.bars[0].pattern[0].count;
+      if([2,3,4].includes(c)) gridSub = c;
+    }
+    document.querySelectorAll('#gridSubGroup .pill-btn').forEach(b=>{
+      b.classList.toggle('selected', parseInt(b.dataset.gridsub,10)===gridSub);
+    });
     subButtons.forEach(b=>{
       b.classList.remove('selected');
       if(useCustomPattern && b.dataset.sub === 'custom') b.classList.add('selected');
@@ -2254,6 +2477,51 @@ canvas{ display:block; width:100%; height:170px; }
   let savedTheme = 'rack';
   try{ savedTheme = localStorage.getItem(THEME_KEY) || 'rack'; }catch(e){}
   applyTheme(savedTheme);
+
+  // ---- Metronome voice selector ----
+  const metroVoiceSelect = document.getElementById('metroVoiceSelect');
+  const VOICE_KEY = 'tapTrainerVoice';
+  try{ const v = localStorage.getItem(VOICE_KEY); if(v){ metroVoice = v; metroVoiceSelect.value = v; } }catch(e){}
+  metroVoiceSelect.addEventListener('change', ()=>{
+    metroVoice = metroVoiceSelect.value;
+    try{ localStorage.setItem(VOICE_KEY, metroVoice); }catch(e){}
+    previewMetroVoice();
+  });
+  document.getElementById('voicePreview').addEventListener('click', ()=>{
+    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    previewMetroVoice();
+  });
+
+  // ---- Practice / Test mode ----
+  const modeButtons = document.querySelectorAll('#modeGroup .pill-btn');
+  const testPanel = document.getElementById('testPanel');
+  const scopePanel = document.querySelector('.scope-wrap#laneWrap');
+  function applyMode(){
+    const test = (appMode === 'test');
+    testPanel.style.display = test ? '' : 'none';
+    applyViewMode();
+    if(test) resetTestFeedback();
+  }
+  modeButtons.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(isRunning) return;
+      modeButtons.forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      appMode = btn.dataset.mode;
+      applyMode();
+    });
+  });
+
+  function resetTestFeedback(){
+    testHitCount = 0;
+    const w = document.getElementById('tfWord'), s = document.getElementById('tfSub');
+    const hits = document.getElementById('testHits');
+    if(w){ w.textContent = 'Ready'; w.className = 'tf-word'; }
+    if(s){ s.textContent = 'Play with the click'; }
+    if(hits){ hits.innerHTML = ''; }
+  }
+
+  applyMode();
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
