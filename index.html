@@ -998,7 +998,9 @@ canvas{ display:block; width:100%; height:170px; }
     async savePreset(name, data){
       if(!configured || !api.user) return;
       const ref = doc(db, 'users', api.user.uid, 'beats', name);
-      await setDoc(ref, { name, data, updated: Date.now() });
+      // Store as a JSON string: the beat model uses nested arrays
+      // (beat.stacks is an array of arrays), which Firestore rejects.
+      await setDoc(ref, { name, dataJson: JSON.stringify(data), updated: Date.now() });
     },
     async deletePreset(name){
       if(!configured || !api.user) return;
@@ -1021,7 +1023,13 @@ canvas{ display:block; width:100%; height:170px; }
         const col = collection(db, 'users', user.uid, 'beats');
         unsubPresets = onSnapshot(col, (snap)=>{
           const presets = {};
-          snap.forEach(d=>{ const v = d.data(); if(v && v.name) presets[v.name] = v.data; });
+          snap.forEach(d=>{
+            const v = d.data();
+            if(!v || !v.name) return;
+            let data = v.data;                       // legacy docs stored the object directly
+            if(v.dataJson){ try{ data = JSON.parse(v.dataJson); }catch(e){ return; } }
+            presets[v.name] = data;
+          });
           if(api.onPresets) api.onPresets(presets);
         }, (err)=>{ console.warn('presets listen error', err); });
       } else {
