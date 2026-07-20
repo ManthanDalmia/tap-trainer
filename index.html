@@ -405,6 +405,20 @@ body{
   border-style:solid;
   color:var(--amber);
 }
+.tag-chip.tick{
+  background:var(--green-dim);
+  color:var(--green);
+  border-color:var(--green);
+  cursor:default;
+}
+.tag-chip.tick::after{ content:'✓'; font-size:10px; opacity:.9; }
+.tag-chip.tick.current{ box-shadow:0 0 0 1px var(--green); font-weight:700; }
+.practiced-empty{
+  font-family:'IBM Plex Sans',sans-serif;
+  font-size:11px;
+  color:var(--muted);
+  font-style:italic;
+}
 .tag-badges{ display:inline-flex; gap:4px; flex-wrap:wrap; }
 .tag-badge{
   font-family:'IBM Plex Sans',sans-serif;
@@ -796,6 +810,10 @@ canvas{ display:block; width:100%; height:170px; }
       <div class="label">Tags</div>
       <div class="tag-chips" id="selectedPresetTags"></div>
     </div>
+    <div class="row" id="practicedRow" style="display:none;">
+      <div class="label">Practiced</div>
+      <div class="tag-chips" id="practicedBpms"></div>
+    </div>
 
     <div class="save-divider"></div>
 
@@ -1075,7 +1093,7 @@ canvas{ display:block; width:100%; height:170px; }
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
            setPersistence, browserLocalPersistence }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot }
+  import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, arrayUnion }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   let app, auth, db, provider, unsubPresets = null;
@@ -1103,6 +1121,13 @@ canvas{ display:block; width:100%; height:170px; }
     async deletePreset(name){
       if(!configured || !api.user) return;
       await deleteDoc(doc(db, 'users', api.user.uid, 'beats', name));
+    },
+    // Record that this beat was practiced at a given BPM (a simple tick log).
+    async logPractice(name, bpm){
+      if(!configured || !api.user || !name || !bpm) return;
+      const ref = doc(db, 'users', api.user.uid, 'beats', name);
+      try{ await updateDoc(ref, { practiced: arrayUnion(bpm) }); }
+      catch(e){ console.warn('logPractice failed', e); }
     }
   };
   window.TapCloud = api;
@@ -1124,17 +1149,19 @@ canvas{ display:block; width:100%; height:170px; }
         const col = collection(db, 'users', user.uid, 'beats');
         unsubPresets = onSnapshot(col, (snap)=>{
           const presets = {};
+          const meta = {};
           snap.forEach(d=>{
             const v = d.data();
             if(!v || !v.name) return;
             let data = v.data;                       // legacy docs stored the object directly
             if(v.dataJson){ try{ data = JSON.parse(v.dataJson); }catch(e){ return; } }
             presets[v.name] = data;
+            meta[v.name] = { practiced: Array.isArray(v.practiced) ? v.practiced : [] };
           });
-          if(api.onPresets) api.onPresets(presets);
+          if(api.onPresets) api.onPresets(presets, meta);
         }, (err)=>{ console.warn('presets listen error', err); });
       } else {
-        if(api.onPresets) api.onPresets({});
+        if(api.onPresets) api.onPresets({}, {});
       }
     });
   }
@@ -1598,6 +1625,8 @@ canvas{ display:block; width:100%; height:170px; }
   function setBpm(v){
     bpm = Math.max(30, Math.min(240, v));
     bpmDisplay.textContent = bpm;
+    // keep the "current BPM" highlight in the practiced ticks in sync
+    if(typeof refreshPracticedHighlight === 'function') refreshPracticedHighlight();
   }
 
   document.getElementById('bpmMinus5').onclick = ()=> setBpm(bpm-5);
@@ -1900,6 +1929,10 @@ canvas{ display:block; width:100%; height:170px; }
     syncPerfNow = performance.now();
     syncCtxTime = audioCtx.currentTime;
     isRunning = true;
+    // Log this beat as practiced at the current BPM (a simple tick log).
+    if(signedIn && currentPresetName && window.TapCloud && TapCloud.logPractice){
+      TapCloud.logPractice(currentPresetName, bpm);
+    }
     beats = [];
     beatCounter = 0;
     quarterIndex = 0;
@@ -2683,6 +2716,8 @@ canvas{ display:block; width:100%; height:170px; }
   const tagFilterChips = document.getElementById('tagFilterChips');
   const presetTagsRow = document.getElementById('presetTagsRow');
   const selectedPresetTags = document.getElementById('selectedPresetTags');
+  const practicedRow = document.getElementById('practicedRow');
+  const practicedBpms = document.getElementById('practicedBpms');
   const saveTagChips = document.getElementById('saveTagChips');
   const tagInput = document.getElementById('tagInput');
   const tagSuggestRow = document.getElementById('tagSuggestRow');
@@ -2690,6 +2725,9 @@ canvas{ display:block; width:100%; height:170px; }
 
   const Cloud = window.TapCloud || { configured:false, user:null };
   let cloudPresets = {};   // in-memory cache, kept fresh by the realtime listener
+  let practicedByName = {};// name -> [bpm, ...] practiced (from cloud)
+  let presetsLoaded = false;// have we received the first snapshot since sign-in?
+  let currentPresetName = null; // the beat currently loaded (for practice logging)
   let signedIn = false;
   let pendingTags = [];    // tags being attached to the preset about to be saved
   let activeFilters = [];  // tags currently filtering the load list
@@ -2772,21 +2810,59 @@ canvas{ display:block; width:100%; height:170px; }
 
   function showPresetTags(name){
     const tags = presetTags(name);
-    if(!name || tags.length === 0){ presetTagsRow.style.display = 'none'; return; }
-    presetTagsRow.style.display = '';
-    selectedPresetTags.innerHTML = '';
-    tags.forEach(t=>{
+    if(!name || tags.length === 0){
+      presetTagsRow.style.display = 'none';
+    } else {
+      presetTagsRow.style.display = '';
+      selectedPresetTags.innerHTML = '';
+      tags.forEach(t=>{
+        const c = document.createElement('span');
+        c.className = 'tag-chip active';
+        c.textContent = t;
+        selectedPresetTags.appendChild(c);
+      });
+    }
+    renderPracticed(name);
+  }
+
+  function renderPracticed(name){
+    if(!name || !signedIn){ practicedRow.style.display = 'none'; return; }
+    practicedRow.style.display = '';
+    practicedBpms.innerHTML = '';
+    const list = ((practicedByName[name] && practicedByName[name].practiced) || [])
+      .slice().sort((a,b)=> a-b);
+    if(list.length === 0){
+      const empty = document.createElement('span');
+      empty.className = 'practiced-empty';
+      empty.textContent = 'Not practiced yet — hit Start to log a BPM.';
+      practicedBpms.appendChild(empty);
+      return;
+    }
+    list.forEach(v=>{
       const c = document.createElement('span');
-      c.className = 'tag-chip active';
-      c.textContent = t;
-      selectedPresetTags.appendChild(c);
+      c.className = 'tag-chip tick' + (v === bpm ? ' current' : '');
+      c.textContent = v + ' BPM';
+      c.title = 'Practiced at ' + v + ' BPM';
+      practicedBpms.appendChild(c);
+    });
+  }
+
+  // Toggle the "current BPM" marker on the practiced ticks without a full re-render.
+  function refreshPracticedHighlight(){
+    if(!practicedRow || practicedRow.style.display === 'none') return;
+    practicedBpms.querySelectorAll('.tag-chip.tick').forEach(chip=>{
+      chip.classList.toggle('current', parseInt(chip.textContent, 10) === bpm);
     });
   }
 
   function refreshPresetSelect(selectName){
-    presetSelect.innerHTML = signedIn
-      ? '<option value="">— select a beat —</option>'
-      : '<option value="">— sign in to load —</option>';
+    const total = Object.keys(cloudPresets).length;
+    let placeholder;
+    if(!signedIn)             placeholder = '— sign in to load —';
+    else if(!presetsLoaded)   placeholder = 'Loading beats…';
+    else if(total === 0)      placeholder = 'No saved beats yet';
+    else                      placeholder = '— select a beat —';
+    presetSelect.innerHTML = '<option value="">' + placeholder + '</option>';
     const names = Object.keys(cloudPresets).sort().filter(name=>{
       if(activeFilters.length === 0) return true;
       const tags = presetTags(name);
@@ -2841,7 +2917,9 @@ canvas{ display:block; width:100%; height:170px; }
         authStatus.textContent = 'Signed in — your beats sync automatically across devices.';
         signInBtn.style.display = 'none';
         signOutBtn.style.display = '';
+        presetsLoaded = false;   // wait for the first snapshot before showing "empty"
         setPresetEnabled(true);
+        refreshPresetSelect();   // show "Loading beats…"
       } else {
         accountCard.classList.remove('show');
         accountAvatar.style.backgroundImage = 'none';
@@ -2850,12 +2928,17 @@ canvas{ display:block; width:100%; height:170px; }
         signInBtn.style.display = '';
         signOutBtn.style.display = 'none';
         cloudPresets = {};
+        practicedByName = {};
+        presetsLoaded = false;
+        currentPresetName = null;
         setPresetEnabled(false);
         refreshPresetSelect();
       }
     };
-    Cloud.onPresets = (presets)=>{
+    Cloud.onPresets = (presets, meta)=>{
       cloudPresets = presets || {};
+      practicedByName = meta || {};
+      presetsLoaded = true;
       const keep = presetSelect.value;
       refreshPresetSelect(keep);
     };
@@ -2870,6 +2953,8 @@ canvas{ display:block; width:100%; height:170px; }
     if(isRunning || !signedIn) return;
     const name = presetNameInput.value.trim();
     if(!name) return;
+    // Overwrite protection: warn if a synced beat with this name already exists
+    if(cloudPresets[name] && !confirm('A beat named "' + name + '" already exists. Overwrite it?')) return;
     // fold in any tag still sitting in the input box
     if(tagInput && tagInput.value.trim()) addPendingTag(tagInput.value);
     const data = {
@@ -2882,6 +2967,7 @@ canvas{ display:block; width:100%; height:170px; }
     authStatus.textContent = 'Saving…';
     try{
       await Cloud.savePreset(name, data);
+      currentPresetName = name;   // this beat is now the active one for practice logging
       presetNameInput.value = '';
       if(tagInput) tagInput.value = '';
       pendingTags = [];
@@ -2917,6 +3003,7 @@ canvas{ display:block; width:100%; height:170px; }
     if(!name) return;
     const p = cloudPresets[name];
     if(!p) return;
+    currentPresetName = name;   // remember which beat is loaded, for practice logging
     setBpm(p.bpm);
     useCustomPattern = !!p.useCustomPattern;
     subdivision = p.subdivision || 2;
@@ -2956,6 +3043,8 @@ canvas{ display:block; width:100%; height:170px; }
     if(isRunning || !signedIn) return;
     const name = presetSelect.value;
     if(!name) return;
+    if(!confirm('Delete "' + name + '"? This removes it from all your devices.')) return;
+    if(currentPresetName === name) currentPresetName = null;
     authStatus.textContent = 'Deleting…';
     try{
       await Cloud.deletePreset(name);
