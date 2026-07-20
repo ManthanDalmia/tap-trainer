@@ -419,6 +419,123 @@ body{
   color:var(--muted);
   font-style:italic;
 }
+
+/* ---- Practice chart ---- */
+.chart-head{ justify-content:space-between; }
+.chart-toggle{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--text);
+  background:none;
+  border:none;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:0;
+}
+.chart-caret{ color:var(--accent); font-size:10px; transition:transform .15s ease; }
+.chart-range{ display:flex; gap:10px; flex-wrap:wrap; }
+.chart-range label{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+}
+.chart-range input{
+  width:52px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  background:var(--inset);
+  color:var(--text);
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:4px 6px;
+  text-align:center;
+}
+.chart-range input:focus{ outline:none; border-color:var(--accent); }
+#chartPanel.collapsed .chart-body{ display:none; }
+#chartPanel.collapsed .chart-caret{ transform:rotate(-90deg); }
+.chart-body{ margin-top:12px; }
+.chart-hint{
+  font-family:'IBM Plex Sans',sans-serif;
+  font-size:11px;
+  color:var(--muted);
+  margin-bottom:10px;
+}
+.chart-scroll{
+  overflow:auto;
+  max-height:420px;
+  border:1px solid var(--line);
+  border-radius:8px;
+}
+.chart-empty{
+  font-family:'IBM Plex Sans',sans-serif;
+  font-size:12px;
+  color:var(--muted);
+  font-style:italic;
+  padding:18px;
+}
+.pchart{ border-collapse:separate; border-spacing:0; width:max-content; }
+.pchart th, .pchart td{
+  border-bottom:1px solid var(--line);
+  border-right:1px solid var(--line);
+}
+.pchart thead th{
+  position:sticky; top:0; z-index:1;
+  background:var(--panel-raised);
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px; font-weight:500;
+  color:var(--muted);
+  padding:7px 4px;
+  min-width:38px;
+  text-align:center;
+}
+.pchart thead th.col-current{ color:var(--accent); }
+.pchart th.corner{
+  position:sticky; left:0; z-index:3;
+  text-align:left;
+  padding:7px 12px;
+  color:var(--text);
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.pchart td.beat-name-cell{
+  position:sticky; left:0; z-index:2;
+  background:var(--panel);
+  font-family:'IBM Plex Sans',sans-serif;
+  font-size:12px;
+  color:var(--text);
+  padding:6px 12px;
+  white-space:nowrap;
+  max-width:180px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.pchart tr.row-current td.beat-name-cell{ color:var(--accent); font-weight:600; }
+.pchart td.cell{ padding:0; text-align:center; }
+.pchart td.cell.col-current{ background:rgba(255,255,255,.03); }
+.cell-btn{
+  width:100%;
+  min-width:38px;
+  height:30px;
+  border:none;
+  background:none;
+  cursor:pointer;
+  color:var(--green);
+  font-size:13px;
+  line-height:1;
+  transition:background .1s ease;
+}
+.cell-btn:hover{ background:var(--panel-raised); }
+.cell-btn.on{ background:var(--green-dim); }
+.cell-btn.on:hover{ background:var(--green-dim); filter:brightness(1.2); }
 .tag-badges{ display:inline-flex; gap:4px; flex-wrap:wrap; }
 .tag-badge{
   font-family:'IBM Plex Sans',sans-serif;
@@ -982,6 +1099,23 @@ canvas{ display:block; width:100%; height:170px; }
     <div class="breakdown" id="breakdownBar"></div>
   </div>
 
+  <div class="panel" id="chartPanel">
+    <div class="row chart-head">
+      <button class="chart-toggle" id="chartToggle" type="button" aria-expanded="true">
+        <span class="chart-caret">▾</span> Practice Chart
+      </button>
+      <div class="chart-range" id="chartRange">
+        <label>From <input type="number" id="chartFrom" value="60" min="30" max="240" step="5"></label>
+        <label>To <input type="number" id="chartTo" value="180" min="30" max="240" step="5"></label>
+        <label>Step <input type="number" id="chartStep" value="10" min="1" max="60" step="1"></label>
+      </div>
+    </div>
+    <div class="chart-body" id="chartBody">
+      <div class="chart-hint">Click a cell to mark a beat as comfortable at that tempo. Cells also fill in automatically when you practice.</div>
+      <div class="chart-scroll" id="chartScroll"></div>
+    </div>
+  </div>
+
   <div class="panel" id="drumKitPanel" style="display:none;">
     <div class="row">
       <div class="label">Kit</div>
@@ -1093,7 +1227,7 @@ canvas{ display:block; width:100%; height:170px; }
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
            setPersistence, browserLocalPersistence }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, arrayUnion }
+  import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, arrayUnion, arrayRemove }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   let app, auth, db, provider, unsubPresets = null;
@@ -1128,6 +1262,13 @@ canvas{ display:block; width:100%; height:170px; }
       const ref = doc(db, 'users', api.user.uid, 'beats', name);
       try{ await updateDoc(ref, { practiced: arrayUnion(bpm) }); }
       catch(e){ console.warn('logPractice failed', e); }
+    },
+    // Mark/unmark a beat as comfortable at a given BPM (used by the chart).
+    async setPracticed(name, bpm, on){
+      if(!configured || !api.user || !name || !bpm) return;
+      const ref = doc(db, 'users', api.user.uid, 'beats', name);
+      try{ await updateDoc(ref, { practiced: on ? arrayUnion(bpm) : arrayRemove(bpm) }); }
+      catch(e){ console.warn('setPracticed failed', e); }
     }
   };
   window.TapCloud = api;
@@ -1625,8 +1766,9 @@ canvas{ display:block; width:100%; height:170px; }
   function setBpm(v){
     bpm = Math.max(30, Math.min(240, v));
     bpmDisplay.textContent = bpm;
-    // keep the "current BPM" highlight in the practiced ticks in sync
+    // keep the "current BPM" highlight in the practiced ticks + chart in sync
     if(typeof refreshPracticedHighlight === 'function') refreshPracticedHighlight();
+    if(typeof highlightChartBpm === 'function') highlightChartBpm();
   }
 
   document.getElementById('bpmMinus5').onclick = ()=> setBpm(bpm-5);
@@ -2718,6 +2860,12 @@ canvas{ display:block; width:100%; height:170px; }
   const selectedPresetTags = document.getElementById('selectedPresetTags');
   const practicedRow = document.getElementById('practicedRow');
   const practicedBpms = document.getElementById('practicedBpms');
+  const chartPanel = document.getElementById('chartPanel');
+  const chartToggle = document.getElementById('chartToggle');
+  const chartScroll = document.getElementById('chartScroll');
+  const chartFrom = document.getElementById('chartFrom');
+  const chartTo = document.getElementById('chartTo');
+  const chartStep = document.getElementById('chartStep');
   const saveTagChips = document.getElementById('saveTagChips');
   const tagInput = document.getElementById('tagInput');
   const tagSuggestRow = document.getElementById('tagSuggestRow');
@@ -2855,6 +3003,90 @@ canvas{ display:block; width:100%; height:170px; }
     });
   }
 
+  // ---- Practice chart (beat x BPM grid) ----
+  function chartColumns(){
+    let from = parseInt(chartFrom.value, 10); if(isNaN(from)) from = 60;
+    let to   = parseInt(chartTo.value, 10);   if(isNaN(to))   to   = 180;
+    let step = parseInt(chartStep.value, 10); if(isNaN(step) || step < 1) step = 10;
+    from = Math.max(30, Math.min(240, from));
+    to   = Math.max(from, Math.min(240, to));
+    step = Math.min(60, step);
+    const cols = [];
+    for(let b = from; b <= to; b += step){ cols.push(b); if(cols.length > 60) break; }
+    return cols;
+  }
+
+  function renderPracticeChart(){
+    if(!chartScroll) return;
+    if(!signedIn){ chartScroll.innerHTML = '<div class="chart-empty">Sign in to track your practice across beats and tempos.</div>'; return; }
+    if(!presetsLoaded){ chartScroll.innerHTML = '<div class="chart-empty">Loading…</div>'; return; }
+    const names = Object.keys(cloudPresets).sort();
+    if(names.length === 0){ chartScroll.innerHTML = '<div class="chart-empty">No saved beats yet — save a beat to start tracking tempos.</div>'; return; }
+    const cols = chartColumns();
+
+    const table = document.createElement('table');
+    table.className = 'pchart';
+    // header
+    const thead = document.createElement('thead');
+    const hrow = document.createElement('tr');
+    const corner = document.createElement('th');
+    corner.className = 'corner';
+    corner.textContent = 'Beat';
+    hrow.appendChild(corner);
+    cols.forEach(b=>{
+      const th = document.createElement('th');
+      if(b === bpm) th.className = 'col-current';
+      th.dataset.bpm = b;
+      th.textContent = b;
+      hrow.appendChild(th);
+    });
+    thead.appendChild(hrow);
+    table.appendChild(thead);
+    // body
+    const tbody = document.createElement('tbody');
+    names.forEach(name=>{
+      const set = new Set((practicedByName[name] && practicedByName[name].practiced) || []);
+      const tr = document.createElement('tr');
+      if(name === currentPresetName) tr.className = 'row-current';
+      const nameCell = document.createElement('td');
+      nameCell.className = 'beat-name-cell';
+      nameCell.textContent = name;
+      nameCell.title = name;
+      tr.appendChild(nameCell);
+      cols.forEach(b=>{
+        const td = document.createElement('td');
+        td.className = 'cell' + (b === bpm ? ' col-current' : '');
+        td.dataset.bpm = b;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const on = set.has(b);
+        btn.className = 'cell-btn' + (on ? ' on' : '');
+        btn.textContent = on ? '✓' : '';
+        btn.title = name + ' @ ' + b + ' BPM' + (on ? ' — comfortable' : '');
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.dataset.name = name;
+        btn.dataset.bpm = b;
+        td.appendChild(btn);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    const sx = chartScroll.scrollLeft, sy = chartScroll.scrollTop;
+    chartScroll.innerHTML = '';
+    chartScroll.appendChild(table);
+    chartScroll.scrollLeft = sx; chartScroll.scrollTop = sy; // keep position across re-renders
+  }
+
+  // Move the "current BPM" column highlight without rebuilding the table.
+  function highlightChartBpm(){
+    if(!chartScroll) return;
+    chartScroll.querySelectorAll('.col-current').forEach(el=> el.classList.remove('col-current'));
+    chartScroll.querySelectorAll('[data-bpm="' + bpm + '"]').forEach(el=>{
+      if(el.tagName === 'TH' || el.classList.contains('cell')) el.classList.add('col-current');
+    });
+  }
+
   function refreshPresetSelect(selectName){
     const total = Object.keys(cloudPresets).length;
     let placeholder;
@@ -2920,6 +3152,7 @@ canvas{ display:block; width:100%; height:170px; }
         presetsLoaded = false;   // wait for the first snapshot before showing "empty"
         setPresetEnabled(true);
         refreshPresetSelect();   // show "Loading beats…"
+        renderPracticeChart();
       } else {
         accountCard.classList.remove('show');
         accountAvatar.style.backgroundImage = 'none';
@@ -2933,6 +3166,7 @@ canvas{ display:block; width:100%; height:170px; }
         currentPresetName = null;
         setPresetEnabled(false);
         refreshPresetSelect();
+        renderPracticeChart();
       }
     };
     Cloud.onPresets = (presets, meta)=>{
@@ -2941,6 +3175,7 @@ canvas{ display:block; width:100%; height:170px; }
       presetsLoaded = true;
       const keep = presetSelect.value;
       refreshPresetSelect(keep);
+      renderPracticeChart();
     };
     Cloud.onError = (e)=>{
       authStatus.textContent = 'Sign-in failed: ' + (e && e.code ? e.code : 'try again') + '.';
@@ -3060,6 +3295,34 @@ canvas{ display:block; width:100%; height:170px; }
   renderSaveTagChips();
   renderTagSuggestions();
   applyViewMode();
+
+  // ---- Practice chart wiring ----
+  chartToggle.addEventListener('click', ()=>{
+    const collapsed = chartPanel.classList.toggle('collapsed');
+    chartToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+  [chartFrom, chartTo, chartStep].forEach(inp=>{
+    inp.addEventListener('change', renderPracticeChart);
+  });
+  chartScroll.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.cell-btn');
+    if(!btn) return;
+    const name = btn.dataset.name;
+    const b = parseInt(btn.dataset.bpm, 10);
+    if(!name || !b) return;
+    const turnOn = !btn.classList.contains('on');
+    // optimistic update so the tick responds instantly
+    if(!practicedByName[name]) practicedByName[name] = { practiced: [] };
+    const arr = practicedByName[name].practiced || (practicedByName[name].practiced = []);
+    if(turnOn){ if(!arr.includes(b)) arr.push(b); }
+    else { practicedByName[name].practiced = arr.filter(x=> x !== b); }
+    btn.classList.toggle('on', turnOn);
+    btn.textContent = turnOn ? '✓' : '';
+    btn.setAttribute('aria-pressed', turnOn ? 'true' : 'false');
+    if(presetSelect.value === name) renderPracticed(name); // keep the inline ticks in sync
+    if(window.TapCloud && TapCloud.setPracticed) TapCloud.setPracticed(name, b, turnOn);
+  });
+  renderPracticeChart();
 
   // ---- Theme switching (Studio Rack <-> Neon Arcade) ----
   const themeToggle = document.getElementById('themeToggle');
