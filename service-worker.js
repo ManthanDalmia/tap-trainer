@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tap-trainer-v1';
+const CACHE_NAME = 'tap-trainer-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  // Only handle same-origin GET requests; let Firebase/Google/auth traffic pass through untouched.
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) {
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );

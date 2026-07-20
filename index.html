@@ -351,6 +351,37 @@ body{
 .preset-input::placeholder{ color:var(--muted); }
 .preset-input:disabled{ opacity:.35; cursor:not-allowed; }
 #presetSelect{ min-width:140px; flex:1; }
+.tag-chips{ display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.tag-chip{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  padding:3px 8px;
+  border-radius:12px;
+  background:var(--panel-raised);
+  color:var(--muted);
+  border:1px solid #000;
+  cursor:pointer;
+  user-select:none;
+  white-space:nowrap;
+}
+.tag-chip.active{
+  background:var(--amber-dim);
+  color:var(--amber);
+  border-color:var(--amber);
+}
+.tag-chip.removable::after{ content:' ✕'; opacity:.6; }
+.tag-chip.suggest{ background:transparent; border-style:dashed; }
+.tag-badges{ display:inline-flex; gap:3px; flex-wrap:wrap; }
+.tag-badge{
+  font-family:'JetBrains Mono',monospace;
+  font-size:8px;
+  padding:1px 5px;
+  border-radius:8px;
+  background:var(--amber-dim);
+  color:var(--amber);
+}
+.save-divider{ height:1px; background:var(--line); margin:10px 0 4px; opacity:.6; }
+
 
 .io-status{
   font-family:'JetBrains Mono',monospace;
@@ -646,15 +677,43 @@ canvas{ display:block; width:100%; height:170px; }
   </div>
 
   <div class="panel">
+    <div class="row" id="authRow">
+      <div class="label">Account</div>
+      <button class="stepper-btn" id="signInBtn" type="button">Sign in with Google</button>
+      <button class="stepper-btn" id="signOutBtn" type="button" style="display:none;">Sign out</button>
+      <div class="io-status" id="authStatus" style="flex-basis:100%;">Sign in to save and sync your custom beats across devices.</div>
+    </div>
+
+    <div class="row" id="tagFilterRow" style="display:none; flex-wrap:wrap; gap:6px;">
+      <div class="label">Filter</div>
+      <div class="tag-chips" id="tagFilterChips"></div>
+    </div>
+
     <div class="row">
       <div class="label">Preset</div>
-      <select id="presetSelect" class="beat-select"><option value="">— none saved —</option></select>
+      <select id="presetSelect" class="beat-select"><option value="">— sign in to load —</option></select>
       <button class="stepper-btn preset-ctrl" id="loadPresetBtn">Load</button>
       <button class="stepper-btn preset-ctrl" id="deletePresetBtn">Delete</button>
     </div>
+    <div class="row" id="presetTagsRow" style="display:none;">
+      <div class="label">Tags</div>
+      <div class="tag-chips" id="selectedPresetTags"></div>
+    </div>
+
+    <div class="save-divider"></div>
+
     <div class="row">
       <input type="text" id="presetNameInput" class="preset-input" placeholder="Name this setup…">
       <button class="stepper-btn preset-ctrl" id="savePresetBtn">Save Preset</button>
+    </div>
+    <div class="row" id="saveTagsRow" style="flex-wrap:wrap; gap:6px;">
+      <div class="label">Tags</div>
+      <div class="tag-chips" id="saveTagChips"></div>
+      <input type="text" id="tagInput" class="preset-input" placeholder="Add tag + Enter…" style="max-width:140px;">
+    </div>
+    <div class="row" id="tagSuggestRow" style="display:none; flex-wrap:wrap; gap:6px;">
+      <div class="label" style="font-size:10px;">Reuse</div>
+      <div class="tag-chips" id="tagSuggestChips"></div>
     </div>
   </div>
 
@@ -751,6 +810,61 @@ canvas{ display:block; width:100%; height:170px; }
     <div class="row" id="midiStatusRow" style="display:none;">
       <div class="io-status" id="midiStatus">Connect your Alesis Nitro Max via USB (or a MIDI interface), then pick it above.</div>
     </div>
+    <div class="row" id="kitToggleRow" style="display:none;">
+      <div class="label">Kit Map</div>
+      <button class="stepper-btn" id="toggleKitBtn" type="button">Show kit map</button>
+    </div>
+    <div class="row" id="latencyRow" style="display:none; flex-wrap:wrap; gap:6px;">
+      <div class="label">Latency</div>
+      <button class="stepper-btn" id="latMinus" type="button">−5</button>
+      <div class="repeat-display" id="latencyDisplay">0 ms</div>
+      <button class="stepper-btn" id="latPlus" type="button">+5</button>
+      <div class="io-status" style="flex-basis:100%;">Raise until your on-beat hits read “Good” in Test mode (compensates for input/audio delay).</div>
+    </div>
+
+  </div>
+
+  <div class="panel" style="padding:10px;">
+    <div class="row" id="viewModeRow" style="margin-bottom:8px; display:none;">
+      <div class="label">View</div>
+      <div class="subdiv-group" id="viewModeGroup">
+        <button class="pill-btn selected" data-view="both">Staff + Lanes</button>
+        <button class="pill-btn" data-view="staff">Staff only</button>
+        <button class="pill-btn" data-view="lanes">Lanes only</button>
+      </div>
+    </div>
+    <div class="scope-wrap" id="staffWrap" style="display:none; margin-bottom:8px;">
+      <canvas id="staff"></canvas>
+      <div class="scope-caption">Drum notation · amber line = playhead</div>
+    </div>
+    <div class="scope-wrap" id="laneWrap">
+      <canvas id="scope"></canvas>
+      <div class="scope-caption">Notes scroll to the amber line · lanes = drums (custom mode)</div>
+    </div>
+    <div id="testPanel" style="display:none;">
+      <div id="testFeedback" class="test-feedback">
+        <div class="tf-word" id="tfWord">Ready</div>
+        <div class="tf-sub" id="tfSub">Play with the click</div>
+      </div>
+      <div class="test-hits" id="testHits"></div>
+    </div>
+  </div>
+
+  <div class="pad-wrap">
+    <button class="tap-pad" id="tapPadLeft">L<br><span class="pad-key">(← )</span></button>
+    <button class="tap-pad" id="tapPadRight">R<br><span class="pad-key">( →)</span></button>
+  </div>
+
+  <div class="panel">
+    <div class="stats-grid">
+      <div class="stat accuracy"><div class="v" id="statAccuracy" aria-live="polite">—</div><div class="k">Accuracy</div></div>
+      <div class="stat"><div class="v" id="statOffset">—</div><div class="k">Avg Offset</div></div>
+      <div class="stat"><div class="v" id="statStreak">0</div><div class="k">Streak</div></div>
+      <div class="stat"><div class="v" id="statBest">0</div><div class="k">Best Streak</div></div>
+      <div class="stat"><div class="v" id="statMiss">0</div><div class="k">Missed</div></div>
+      <div class="stat"><div class="v" id="statExtra">0</div><div class="k">Extra Taps</div></div>
+    </div>
+    <div class="breakdown" id="breakdownBar"></div>
   </div>
 
   <div class="panel" id="drumKitPanel" style="display:none;">
@@ -841,50 +955,81 @@ canvas{ display:block; width:100%; height:170px; }
       </svg>
     </div>
   </div>
-
-  <div class="panel" style="padding:10px;">
-    <div class="row" id="viewModeRow" style="margin-bottom:8px; display:none;">
-      <div class="label">View</div>
-      <div class="subdiv-group" id="viewModeGroup">
-        <button class="pill-btn selected" data-view="both">Staff + Lanes</button>
-        <button class="pill-btn" data-view="staff">Staff only</button>
-        <button class="pill-btn" data-view="lanes">Lanes only</button>
-      </div>
-    </div>
-    <div class="scope-wrap" id="staffWrap" style="display:none; margin-bottom:8px;">
-      <canvas id="staff"></canvas>
-      <div class="scope-caption">Drum notation · amber line = playhead</div>
-    </div>
-    <div class="scope-wrap" id="laneWrap">
-      <canvas id="scope"></canvas>
-      <div class="scope-caption">Notes scroll to the amber line · lanes = drums (custom mode)</div>
-    </div>
-    <div id="testPanel" style="display:none;">
-      <div id="testFeedback" class="test-feedback">
-        <div class="tf-word" id="tfWord">Ready</div>
-        <div class="tf-sub" id="tfSub">Play with the click</div>
-      </div>
-      <div class="test-hits" id="testHits"></div>
-    </div>
-  </div>
-
-  <div class="pad-wrap">
-    <button class="tap-pad" id="tapPadLeft">L<br><span class="pad-key">(← )</span></button>
-    <button class="tap-pad" id="tapPadRight">R<br><span class="pad-key">( →)</span></button>
-  </div>
-
-  <div class="panel">
-    <div class="stats-grid">
-      <div class="stat accuracy"><div class="v" id="statAccuracy" aria-live="polite">—</div><div class="k">Accuracy</div></div>
-      <div class="stat"><div class="v" id="statOffset">—</div><div class="k">Avg Offset</div></div>
-      <div class="stat"><div class="v" id="statStreak">0</div><div class="k">Streak</div></div>
-      <div class="stat"><div class="v" id="statBest">0</div><div class="k">Best Streak</div></div>
-      <div class="stat"><div class="v" id="statMiss">0</div><div class="k">Missed</div></div>
-      <div class="stat"><div class="v" id="statExtra">0</div><div class="k">Extra Taps</div></div>
-    </div>
-    <div class="breakdown" id="breakdownBar"></div>
-  </div>
 </div>
+
+<script type="module">
+  // ============================================================
+  //  FIREBASE CONFIG — paste your workout app's config here.
+  //  (Firebase console -> Project settings -> your web app -> config)
+  //  Also add your GitHub Pages domain under
+  //  Authentication -> Settings -> Authorized domains.
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyDpwRPy3xoMwfirrEqxMl8D6-KDyArpstA",
+    authDomain: "workout-7673d.firebaseapp.com",
+    projectId: "workout-7673d",
+    storageBucket: "workout-7673d.firebasestorage.app",
+    messagingSenderId: "301470631506",
+    appId: "1:301470631506:web:68ee218e0efaebedd3c18b",
+    measurementId: "G-873G3XWZ7Z"
+  };
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  let app, auth, db, provider, unsubPresets = null;
+  const configured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "PASTE_API_KEY";
+
+  const api = {
+    configured,
+    user: null,
+    onAuth: null,        // set by main script: (user)=>{}
+    onPresets: null,     // set by main script: (presetsObj)=>{}
+    onError: null,
+    async signIn(){
+      if(!configured) return;
+      try{ await signInWithPopup(auth, provider); }
+      catch(e){ console.warn('sign-in failed', e); if(api.onError) api.onError(e); }
+    },
+    async signOutUser(){ if(configured) try{ await signOut(auth); }catch(e){} },
+    async savePreset(name, data){
+      if(!configured || !api.user) return;
+      const ref = doc(db, 'users', api.user.uid, 'beats', name);
+      await setDoc(ref, { name, data, updated: Date.now() });
+    },
+    async deletePreset(name){
+      if(!configured || !api.user) return;
+      await deleteDoc(doc(db, 'users', api.user.uid, 'beats', name));
+    }
+  };
+  window.TapCloud = api;
+
+  if(configured){
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    provider = new GoogleAuthProvider();
+
+    onAuthStateChanged(auth, (user)=>{
+      api.user = user || null;
+      if(api.onAuth) api.onAuth(api.user);
+      if(unsubPresets){ unsubPresets(); unsubPresets = null; }
+      if(user){
+        const col = collection(db, 'users', user.uid, 'beats');
+        unsubPresets = onSnapshot(col, (snap)=>{
+          const presets = {};
+          snap.forEach(d=>{ const v = d.data(); if(v && v.name) presets[v.name] = v.data; });
+          if(api.onPresets) api.onPresets(presets);
+        }, (err)=>{ console.warn('presets listen error', err); });
+      } else {
+        if(api.onPresets) api.onPresets({});
+      }
+    });
+  }
+</script>
 
 <script>
 (function(){
@@ -994,6 +1139,16 @@ canvas{ display:block; width:100%; height:170px; }
 
   let isRunning = false;
   let audioCtx = null;
+  let midiLatencyMs = 0; // user-calibrated input latency, subtracted from MIDI timestamps
+  function makeAudioCtx(){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    try{
+      return new AC({ latencyHint: 'interactive', sampleRate: 44100 });
+    }catch(e){
+      try{ return new AC({ latencyHint: 'interactive' }); }
+      catch(e2){ return new AC(); }
+    }
+  }
   let inputMode = 'buttons'; // 'buttons' | 'midi'
   let syncPerfNow = 0;
   let syncCtxTime = 0;
@@ -1395,6 +1550,8 @@ canvas{ display:block; width:100%; height:170px; }
   function setControlsEnabled(enabled){
     document.querySelectorAll('.stepper-btn, .pill-btn, .beat-select, .mute-btn, .preset-input').forEach(b=> b.disabled = !enabled);
     if(typeof renderDrumKit === 'function') renderDrumKit();
+    // preset controls also depend on sign-in state
+    if(typeof setPresetEnabled === 'function') setPresetEnabled(signedIn);
   }
 
   function resetStats(){
@@ -1533,7 +1690,7 @@ canvas{ display:block; width:100%; height:170px; }
   }
 
   function previewMetroVoice(){
-    if(!audioCtx){ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+    if(!audioCtx){ audioCtx = makeAudioCtx(); }
     playClick(audioCtx.currentTime+0.02, true);
   }
 
@@ -1629,7 +1786,7 @@ canvas{ display:block; width:100%; height:170px; }
 
   function start(){
     if(isRunning) return;
-    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(!audioCtx) audioCtx = makeAudioCtx();
     if(audioCtx.state === 'suspended') audioCtx.resume();
     syncPerfNow = performance.now();
     syncCtxTime = audioCtx.currentTime;
@@ -2299,7 +2456,9 @@ canvas{ display:block; width:100%; height:170px; }
     const piece = pieceForNote(note);
     if(piece) flashDrumPad(piece.id);
 
-    const t = audioCtx ? syncCtxTime + (msg.timeStamp - syncPerfNow)/1000 : null;
+    // subtract the user's calibrated input latency so scoring reflects actual timing
+    const raw = audioCtx ? syncCtxTime + (msg.timeStamp - syncPerfNow)/1000 : null;
+    const t = (raw !== null) ? raw - (midiLatencyMs/1000) : null;
     if(t !== null) registerTap({ time:t, silent:true, pulseBoth:true, drum: piece ? piece.id : null });
   }
 
@@ -2345,12 +2504,46 @@ canvas{ display:block; width:100%; height:170px; }
     });
   }
 
+  const kitToggleRow = document.getElementById('kitToggleRow');
+  const toggleKitBtn = document.getElementById('toggleKitBtn');
+
+  // ---- MIDI latency calibration ----
+  const latencyRow = document.getElementById('latencyRow');
+  const latencyDisplay = document.getElementById('latencyDisplay');
+  const LAT_KEY = 'tapTrainerMidiLatency';
+  try{ const v = parseInt(localStorage.getItem(LAT_KEY),10); if(!isNaN(v)) midiLatencyMs = v; }catch(e){}
+  function updateLatencyDisplay(){ if(latencyDisplay) latencyDisplay.textContent = midiLatencyMs + ' ms'; }
+  function setLatency(v){
+    midiLatencyMs = Math.max(0, Math.min(200, v));
+    updateLatencyDisplay();
+    try{ localStorage.setItem(LAT_KEY, String(midiLatencyMs)); }catch(e){}
+  }
+  updateLatencyDisplay();
+  const latMinusBtn = document.getElementById('latMinus');
+  const latPlusBtn = document.getElementById('latPlus');
+  if(latMinusBtn) latMinusBtn.addEventListener('click', ()=> setLatency(midiLatencyMs-5));
+  if(latPlusBtn) latPlusBtn.addEventListener('click', ()=> setLatency(midiLatencyMs+5));
+
+  function setKitVisible(show){
+    drumKitPanel.style.display = show ? '' : 'none';
+    if(toggleKitBtn) toggleKitBtn.textContent = show ? 'Hide kit map' : 'Show kit map';
+  }
+  if(toggleKitBtn){
+    toggleKitBtn.addEventListener('click', ()=>{
+      const showing = drumKitPanel.style.display !== 'none';
+      setKitVisible(!showing);
+    });
+  }
+
   function setInputMode(mode){
     inputMode = mode;
     inputModeButtons.forEach(b=> b.classList.toggle('selected', b.dataset.input === mode));
     midiControls.style.display = mode === 'midi' ? '' : 'none';
     midiStatusRow.style.display = mode === 'midi' ? '' : 'none';
-    drumKitPanel.style.display = mode === 'midi' ? '' : 'none';
+    // kit map is only relevant for MIDI; show the toggle there, keep the panel hidden until asked
+    kitToggleRow.style.display = mode === 'midi' ? '' : 'none';
+    latencyRow.style.display = mode === 'midi' ? '' : 'none';
+    if(mode !== 'midi') setKitVisible(false);
 
     if(mode === 'midi'){
       initMidi();
@@ -2367,52 +2560,220 @@ canvas{ display:block; width:100%; height:170px; }
   });
 
   // ---- Presets (saved locally on this device/browser) ----
-  const PRESET_KEY = 'tapTrainerPresets_v1';
   const presetSelect = document.getElementById('presetSelect');
   const presetNameInput = document.getElementById('presetNameInput');
+  const signInBtn = document.getElementById('signInBtn');
+  const signOutBtn = document.getElementById('signOutBtn');
+  const authStatus = document.getElementById('authStatus');
+  const presetCtrls = document.querySelectorAll('.preset-ctrl');
+  const tagFilterRow = document.getElementById('tagFilterRow');
+  const tagFilterChips = document.getElementById('tagFilterChips');
+  const presetTagsRow = document.getElementById('presetTagsRow');
+  const selectedPresetTags = document.getElementById('selectedPresetTags');
+  const saveTagChips = document.getElementById('saveTagChips');
+  const tagInput = document.getElementById('tagInput');
+  const tagSuggestRow = document.getElementById('tagSuggestRow');
+  const tagSuggestChips = document.getElementById('tagSuggestChips');
 
-  function loadPresetsFromStorage(){
-    try{ return JSON.parse(localStorage.getItem(PRESET_KEY) || '{}'); }
-    catch(e){ return {}; }
+  const Cloud = window.TapCloud || { configured:false, user:null };
+  let cloudPresets = {};   // in-memory cache, kept fresh by the realtime listener
+  let signedIn = false;
+  let pendingTags = [];    // tags being attached to the preset about to be saved
+  let activeFilters = [];  // tags currently filtering the load list
+
+  function presetTags(name){
+    const p = cloudPresets[name];
+    return (p && Array.isArray(p.tags)) ? p.tags : [];
   }
-  function savePresetsToStorage(obj){
-    try{ localStorage.setItem(PRESET_KEY, JSON.stringify(obj)); }
-    catch(e){}
+  function allKnownTags(){
+    const s = new Set();
+    Object.keys(cloudPresets).forEach(n=> presetTags(n).forEach(t=> s.add(t)));
+    return Array.from(s).sort();
   }
+  function normalizeTag(t){
+    return (t||'').trim().toLowerCase().replace(/\s+/g,'-').slice(0,24);
+  }
+
+  function setPresetEnabled(enabled){
+    presetCtrls.forEach(b=> b.disabled = !enabled || isRunning);
+    presetSelect.disabled = !enabled;
+    presetNameInput.disabled = !enabled;
+    if(tagInput) tagInput.disabled = !enabled || isRunning;
+  }
+
+  // ---- tag chip rendering ----
+  function renderSaveTagChips(){
+    saveTagChips.innerHTML = '';
+    pendingTags.forEach(t=>{
+      const c = document.createElement('span');
+      c.className = 'tag-chip active removable';
+      c.textContent = t;
+      c.title = 'Remove tag';
+      c.addEventListener('click', ()=>{
+        pendingTags = pendingTags.filter(x=>x!==t);
+        renderSaveTagChips(); renderTagSuggestions();
+      });
+      saveTagChips.appendChild(c);
+    });
+  }
+  function renderTagSuggestions(){
+    const known = allKnownTags().filter(t=> !pendingTags.includes(t));
+    if(known.length === 0){ tagSuggestRow.style.display = 'none'; return; }
+    tagSuggestRow.style.display = '';
+    tagSuggestChips.innerHTML = '';
+    known.forEach(t=>{
+      const c = document.createElement('span');
+      c.className = 'tag-chip suggest';
+      c.textContent = '+ ' + t;
+      c.addEventListener('click', ()=>{
+        if(!pendingTags.includes(t)) pendingTags.push(t);
+        renderSaveTagChips(); renderTagSuggestions();
+      });
+      tagSuggestChips.appendChild(c);
+    });
+  }
+  function addPendingTag(raw){
+    const t = normalizeTag(raw);
+    if(t && !pendingTags.includes(t)) pendingTags.push(t);
+    renderSaveTagChips(); renderTagSuggestions();
+  }
+
+  function renderTagFilters(){
+    const known = allKnownTags();
+    if(!signedIn || known.length === 0){ tagFilterRow.style.display = 'none'; return; }
+    tagFilterRow.style.display = '';
+    tagFilterChips.innerHTML = '';
+    known.forEach(t=>{
+      const c = document.createElement('span');
+      c.className = 'tag-chip' + (activeFilters.includes(t) ? ' active' : '');
+      c.textContent = t;
+      c.addEventListener('click', ()=>{
+        if(activeFilters.includes(t)) activeFilters = activeFilters.filter(x=>x!==t);
+        else activeFilters.push(t);
+        renderTagFilters();
+        refreshPresetSelect(presetSelect.value);
+      });
+      tagFilterChips.appendChild(c);
+    });
+  }
+
+  function showPresetTags(name){
+    const tags = presetTags(name);
+    if(!name || tags.length === 0){ presetTagsRow.style.display = 'none'; return; }
+    presetTagsRow.style.display = '';
+    selectedPresetTags.innerHTML = '';
+    tags.forEach(t=>{
+      const c = document.createElement('span');
+      c.className = 'tag-chip active';
+      c.textContent = t;
+      selectedPresetTags.appendChild(c);
+    });
+  }
+
   function refreshPresetSelect(selectName){
-    const presets = loadPresetsFromStorage();
-    presetSelect.innerHTML = '<option value="">— none saved —</option>';
-    Object.keys(presets).sort().forEach(name=>{
+    presetSelect.innerHTML = signedIn
+      ? '<option value="">— select a beat —</option>'
+      : '<option value="">— sign in to load —</option>';
+    const names = Object.keys(cloudPresets).sort().filter(name=>{
+      if(activeFilters.length === 0) return true;
+      const tags = presetTags(name);
+      return activeFilters.every(f=> tags.includes(f)); // must match ALL active filters
+    });
+    names.forEach(name=>{
       const opt = document.createElement('option');
+      const tags = presetTags(name);
       opt.value = name;
-      opt.textContent = name;
+      opt.textContent = tags.length ? (name + '  ·  ' + tags.join(', ')) : name;
       presetSelect.appendChild(opt);
     });
-    if(selectName && presets[selectName]) presetSelect.value = selectName;
+    if(selectName && cloudPresets[selectName] && names.includes(selectName)){
+      presetSelect.value = selectName;
+    }
+    renderTagFilters();
+    showPresetTags(presetSelect.value);
   }
 
-  document.getElementById('savePresetBtn').onclick = ()=>{
-    if(isRunning) return;
+  // ---- Auth wiring ----
+  if(!Cloud.configured){
+    authStatus.textContent = 'Cloud sync not configured yet. Add your Firebase config to enable saving beats.';
+    signInBtn.disabled = true;
+    setPresetEnabled(false);
+  } else {
+    setPresetEnabled(false);
+    Cloud.onAuth = (user)=>{
+      signedIn = !!user;
+      if(user){
+        authStatus.textContent = 'Signed in as ' + (user.displayName || user.email || 'you') + ' — beats sync automatically.';
+        signInBtn.style.display = 'none';
+        signOutBtn.style.display = '';
+        setPresetEnabled(true);
+      } else {
+        authStatus.textContent = 'Sign in to save and sync your custom beats across devices.';
+        signInBtn.style.display = '';
+        signOutBtn.style.display = 'none';
+        cloudPresets = {};
+        setPresetEnabled(false);
+        refreshPresetSelect();
+      }
+    };
+    Cloud.onPresets = (presets)=>{
+      cloudPresets = presets || {};
+      const keep = presetSelect.value;
+      refreshPresetSelect(keep);
+    };
+    Cloud.onError = (e)=>{
+      authStatus.textContent = 'Sign-in failed: ' + (e && e.code ? e.code : 'try again') + '.';
+    };
+    signInBtn.addEventListener('click', ()=> Cloud.signIn());
+    signOutBtn.addEventListener('click', ()=> Cloud.signOutUser());
+  }
+
+  document.getElementById('savePresetBtn').onclick = async ()=>{
+    if(isRunning || !signedIn) return;
     const name = presetNameInput.value.trim();
     if(!name) return;
-    const presets = loadPresetsFromStorage();
-    presets[name] = {
+    // fold in any tag still sitting in the input box
+    if(tagInput && tagInput.value.trim()) addPendingTag(tagInput.value);
+    const data = {
       bpm,
       useCustomPattern,
       subdivision,
-      bars: JSON.parse(JSON.stringify(bars))
+      bars: JSON.parse(JSON.stringify(bars)),
+      tags: pendingTags.slice()
     };
-    savePresetsToStorage(presets);
-    refreshPresetSelect(name);
-    presetNameInput.value = '';
+    authStatus.textContent = 'Saving…';
+    try{
+      await Cloud.savePreset(name, data);
+      presetNameInput.value = '';
+      if(tagInput) tagInput.value = '';
+      pendingTags = [];
+      renderSaveTagChips(); renderTagSuggestions();
+      authStatus.textContent = 'Saved "' + name + '"' + (data.tags.length ? ' [' + data.tags.join(', ') + ']' : '') + '. Synced.';
+    }catch(e){
+      authStatus.textContent = 'Save failed — check your connection.';
+    }
   };
 
+  // tag input: Enter or comma adds a tag
+  if(tagInput){
+    tagInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ','){
+        e.preventDefault();
+        addPendingTag(tagInput.value);
+        tagInput.value = '';
+      }
+    });
+    tagInput.addEventListener('blur', ()=>{
+      if(tagInput.value.trim()){ addPendingTag(tagInput.value); tagInput.value=''; }
+    });
+  }
+  presetSelect.addEventListener('change', ()=> showPresetTags(presetSelect.value));
+
   document.getElementById('loadPresetBtn').onclick = ()=>{
-    if(isRunning) return;
+    if(isRunning || !signedIn) return;
     const name = presetSelect.value;
     if(!name) return;
-    const presets = loadPresetsFromStorage();
-    const p = presets[name];
+    const p = cloudPresets[name];
     if(!p) return;
     setBpm(p.bpm);
     useCustomPattern = !!p.useCustomPattern;
@@ -2420,14 +2781,12 @@ canvas{ display:block; width:100%; height:170px; }
     bars = (p.bars && p.bars.length) ? JSON.parse(JSON.stringify(p.bars)) : [defaultBar()];
     bars.forEach(bar => bar.pattern.forEach(beat => ensureBeatArrays(beat)));
     editingBarIndex = 0;
-    // rebuild grid rows from the instruments actually used, in kit order
     const used = new Set();
     bars.forEach(bar=>bar.pattern.forEach(beat=>{
       (beat.stacks||[]).forEach(st=> stackInstruments(st).forEach(i=>used.add(i)));
     }));
     const rows = DRUM_ORDER.filter(d=>used.has(d));
     gridInstruments = rows.length ? rows : ['hihat','snare','kick'];
-    // adopt the loaded bar's subdivision as grid subdivision
     if(p.bars && p.bars[0] && p.bars[0].pattern && p.bars[0].pattern[0]){
       const c = p.bars[0].pattern[0].count;
       if([2,3,4].includes(c)) gridSub = c;
@@ -2444,19 +2803,29 @@ canvas{ display:block; width:100%; height:170px; }
     applyViewMode();
     renderBarTabs();
     renderBarEditor();
+    // prefill the save box so re-saving keeps name + tags
+    presetNameInput.value = name;
+    pendingTags = presetTags(name).slice();
+    renderSaveTagChips(); renderTagSuggestions();
+    showPresetTags(name);
   };
 
-  document.getElementById('deletePresetBtn').onclick = ()=>{
-    if(isRunning) return;
+  document.getElementById('deletePresetBtn').onclick = async ()=>{
+    if(isRunning || !signedIn) return;
     const name = presetSelect.value;
     if(!name) return;
-    const presets = loadPresetsFromStorage();
-    delete presets[name];
-    savePresetsToStorage(presets);
-    refreshPresetSelect();
+    authStatus.textContent = 'Deleting…';
+    try{
+      await Cloud.deletePreset(name);
+      authStatus.textContent = 'Deleted “' + name + '”.';
+    }catch(e){
+      authStatus.textContent = 'Delete failed — check your connection.';
+    }
   };
 
   refreshPresetSelect();
+  renderSaveTagChips();
+  renderTagSuggestions();
   applyViewMode();
 
   // ---- Theme switching (Studio Rack <-> Neon Arcade) ----
